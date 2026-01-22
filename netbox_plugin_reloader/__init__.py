@@ -20,8 +20,8 @@ class NetboxPluginReloaderConfig(PluginConfig):
     description = "Dynamically reload NetBox plugins without server restart"
     version = __version__
     base_url = "netbox-plugin-reloader"
-    min_version = "4.4.0"
-    max_version = "4.4.99"
+    min_version = "4.5.0"
+    max_version = "4.5.99"
 
     def ready(self):
         """
