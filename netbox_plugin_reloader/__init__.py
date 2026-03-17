@@ -104,6 +104,9 @@ class NetboxPluginReloaderConfig(PluginConfig):
                     deduped = []
                     for entry in view_list:
                         key = entry.get("name")
+                        if key is None:
+                            deduped.append(entry)
+                            continue
                         if key not in seen:
                             seen.add(key)
                             deduped.append(entry)
