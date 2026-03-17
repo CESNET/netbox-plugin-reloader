@@ -18,7 +18,8 @@ A NetBox plugin that dynamically reloads plugins without requiring a server rest
 | 4.2.x          | 0.0.2         |
 | 4.3.x          | 4.3.x         |
 | 4.4.x          | 4.4.x         |
-| 4.5.x          | 4.5.x         |
+| 4.5.0 - 4.5.3  | 4.5.0.1       |
+| 4.5.4+         | 4.5.4.x       |
 
 
 **Version Format**: X.X.Y.Z where X.X = NetBox major version (e.g., 4.5), Y = NetBox minor version (e.g., 0), and Z = plugin release increment

@@ -1,6 +1,6 @@
 # Changelog
 
-## [4.5.0.2] - 2026-03-16
+## [4.5.4.1] - 2026-03-16
 
 ### Fixed
 - Added defensive deduplication of `registry['views']` entries after model registration.
