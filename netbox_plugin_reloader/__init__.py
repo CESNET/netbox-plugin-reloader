@@ -79,10 +79,13 @@ class NetboxPluginReloaderConfig(PluginConfig):
         unregistered_models = []
 
         for plugin_name, app_config, app_label in plugin_configs:
-            for model_class in app_config.get_models():
-                model_name = model_class._meta.model_name
-                if not self._is_model_registered(app_label, model_name, netbox_registry):
-                    unregistered_models.append(model_class)
+            try:
+                for model_class in app_config.get_models():
+                    model_name = model_class._meta.model_name
+                    if not self._is_model_registered(app_label, model_name, netbox_registry):
+                        unregistered_models.append(model_class)
+            except Exception:
+                logger.exception("Error processing models for plugin %s", plugin_name)
 
         if unregistered_models:
             model_register_function(*unregistered_models)

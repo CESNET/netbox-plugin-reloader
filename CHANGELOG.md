@@ -19,6 +19,7 @@
 
 ### Changed
 - Updated registry check for NetBox 4.4+ structure (`registry['models'][app_label][model_name]`).
+- Removed `FEATURES_MAP` fallback in favor of direct registry lookup.
 
 ## [0.0.2] - 2025-02-26
 
