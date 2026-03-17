@@ -2,9 +2,13 @@
 NetBox Plugin Reloader - Dynamically reload NetBox plugins without server restart.
 """
 
+import logging
+
 from netbox.plugins import PluginConfig
 
 from netbox_plugin_reloader.version import __version__
+
+logger = logging.getLogger(__name__)
 
 
 class NetboxPluginReloaderConfig(PluginConfig):
@@ -43,6 +47,9 @@ class NetboxPluginReloaderConfig(PluginConfig):
         # Register missing plugin models
         self._register_missing_plugin_models(settings.PLUGINS, apps, registry, register_models)
 
+        # Deduplicate view registrations that may have accumulated during dynamic model registration
+        self._deduplicate_view_registrations(settings.PLUGINS, apps, registry)
+
         # Refresh form fields
         self._refresh_form_field(CustomFieldForm, "custom_fields", ObjectType, ContentTypeMultipleChoiceField, _)
         self._refresh_form_field(TagForm, "tags", ObjectType, ContentTypeMultipleChoiceField, _)
@@ -66,11 +73,44 @@ class NetboxPluginReloaderConfig(PluginConfig):
                         unregistered_models.append(model_class)
 
             except Exception as e:
-                print(f"Error processing plugin {plugin_name}: {e}")
+                logger.error("Error processing plugin %s: %s", plugin_name, e)
 
         if unregistered_models:
             model_register_function(*unregistered_models)
-            print(f"Plugin Reloader: Registered {len(unregistered_models)} previously missed models")
+            logger.info("Registered %d previously missed models", len(unregistered_models))
+
+    def _deduplicate_view_registrations(self, plugin_list, app_registry, netbox_registry):
+        """
+        Removes duplicate view registrations for plugin models from the NetBox registry.
+
+        When dynamic models are registered, register_model_view may be called multiple
+        times for the same model/view combination, resulting in duplicate tabs (e.g.
+        Journal, Changelog appearing more than once). This method deduplicates entries
+        in registry['views'] for all plugin app labels, keeping only the first occurrence
+        of each view name per model.
+        """
+        views_registry = netbox_registry.get("views", {})
+
+        for plugin_name in plugin_list:
+            try:
+                plugin_app_config = app_registry.get_app_config(plugin_name)
+                app_label = plugin_app_config.label
+
+                if app_label not in views_registry:
+                    continue
+
+                for model_name, view_list in list(views_registry[app_label].items()):
+                    seen = set()
+                    deduped = []
+                    for entry in view_list:
+                        key = entry.get("name")
+                        if key not in seen:
+                            seen.add(key)
+                            deduped.append(entry)
+                    views_registry[app_label][model_name] = deduped
+
+            except Exception as e:
+                logger.error("Error deduplicating views for plugin %s: %s", plugin_name, e)
 
     def _is_model_registered(self, app_label, model_name, registry):
         """
