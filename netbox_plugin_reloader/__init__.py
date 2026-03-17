@@ -44,6 +44,7 @@ class NetboxPluginReloaderConfig(PluginConfig):
         from netbox.registry import registry
         from utilities.forms.fields import ContentTypeMultipleChoiceField
 
+        # Materialized because plugin_configs is iterated by both registration and deduplication
         plugin_configs = list(self._iter_plugin_configs(settings.PLUGINS, apps))
 
         # Register missing plugin models
@@ -66,8 +67,8 @@ class NetboxPluginReloaderConfig(PluginConfig):
             try:
                 app_config = app_registry.get_app_config(plugin_name)
                 yield plugin_name, app_config, app_config.label
-            except Exception as e:
-                logger.error("Error resolving plugin %s: %s", plugin_name, e)
+            except LookupError as e:
+                logger.error("Error resolving plugin %s: %s", plugin_name, e, exc_info=True)
 
     def _register_missing_plugin_models(self, plugin_configs, netbox_registry, model_register_function):
         """
@@ -116,6 +117,9 @@ class NetboxPluginReloaderConfig(PluginConfig):
                     if key not in seen:
                         seen.add(key)
                         deduped.append(entry)
+                removed = len(view_list) - len(deduped)
+                if removed:
+                    logger.debug("Removed %d duplicate view entries for %s.%s", removed, app_label, model_name)
                 views_registry[app_label][model_name] = deduped
 
     def _is_model_registered(self, app_label, model_name, netbox_registry):
