@@ -22,7 +22,7 @@ A NetBox plugin that dynamically reloads plugins without requiring a server rest
 | 4.5.4+         | 4.5.4.x       |
 
 
-**Version Format**: X.X.Y.Z where X.X = NetBox major version (e.g., 4.5), Y = NetBox minor version (e.g., 0), and Z = plugin release increment
+**Version Format**: X.X.Y.Z where X.X = NetBox major.minor version (e.g., 4.5), Y = NetBox patch version (e.g., 0), and Z = plugin release increment
 
 ## Installation
 
