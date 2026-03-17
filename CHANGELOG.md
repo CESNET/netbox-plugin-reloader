@@ -7,6 +7,12 @@
   This prevents duplicate Journal/Changelog tabs caused by dynamic model plugins
   (e.g. `netbox_custom_objects`) triggering multiple `register_model_view` calls
   during Plugin Reloader's `ready()` cycle.
+- Changed deduplication strategy from "first wins" to "last wins" to ensure the most
+  recent view registration is kept when dynamic model plugins re-register views.
+
+### Added
+- Unit tests for all core methods (deduplication, model registration, plugin iteration,
+  form field refresh).
 
 ## [4.5.0.1] - 2026-01-22
 

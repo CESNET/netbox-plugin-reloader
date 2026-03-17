@@ -100,8 +100,8 @@ class NetboxPluginReloaderConfig(PluginConfig):
         When dynamic models are registered, register_model_view may be called multiple
         times for the same model/view combination, resulting in duplicate tabs (e.g.
         Journal, Changelog appearing more than once). This method deduplicates entries
-        in registry['views'] for all plugin app labels, keeping only the first occurrence
-        of each view name per model.
+        in registry['views'] for all plugin app labels, keeping only the last occurrence
+        of each view name per model (last wins ensures the most recent registration is kept).
         """
         views_registry = netbox_registry.get("views", {})
 
@@ -111,15 +111,16 @@ class NetboxPluginReloaderConfig(PluginConfig):
 
             for model_name, view_list in list(views_registry[app_label].items()):
                 seen = set()
-                deduped = []
-                for entry in view_list:
+                reversed_deduped = []
+                for entry in reversed(view_list):
                     key = entry.get("name")
                     if key is None:
-                        deduped.append(entry)
+                        reversed_deduped.append(entry)
                         continue
                     if key not in seen:
                         seen.add(key)
-                        deduped.append(entry)
+                        reversed_deduped.append(entry)
+                deduped = list(reversed(reversed_deduped))
                 removed = len(view_list) - len(deduped)
                 if removed:
                     logger.debug("Removed %d duplicate view entries for %s.%s", removed, app_label, model_name)
