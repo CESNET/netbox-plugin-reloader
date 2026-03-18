@@ -2,9 +2,13 @@
 NetBox Plugin Reloader - Dynamically reload NetBox plugins without server restart.
 """
 
+import logging
+
 from netbox.plugins import PluginConfig
 
 from netbox_plugin_reloader.version import __version__
+
+logger = logging.getLogger(__name__)
 
 
 class NetboxPluginReloaderConfig(PluginConfig):
@@ -20,7 +24,7 @@ class NetboxPluginReloaderConfig(PluginConfig):
     description = "Dynamically reload NetBox plugins without server restart"
     version = __version__
     base_url = "netbox-plugin-reloader"
-    min_version = "4.5.0"
+    min_version = "4.5.4"
     max_version = "4.5.99"
 
     def ready(self):
@@ -40,59 +44,100 @@ class NetboxPluginReloaderConfig(PluginConfig):
         from netbox.registry import registry
         from utilities.forms.fields import ContentTypeMultipleChoiceField
 
+        # Materialized because plugin_configs is iterated by both registration and deduplication
+        plugin_configs = list(self._iter_plugin_configs(settings.PLUGINS, apps))
+
         # Register missing plugin models
-        self._register_missing_plugin_models(settings.PLUGINS, apps, registry, register_models)
+        models_registered = self._register_missing_plugin_models(plugin_configs, registry, register_models)
 
-        # Refresh form fields
-        self._refresh_form_field(CustomFieldForm, "custom_fields", ObjectType, ContentTypeMultipleChoiceField, _)
-        self._refresh_form_field(TagForm, "tags", ObjectType, ContentTypeMultipleChoiceField, _)
+        # Deduplicate view registrations that may have accumulated during dynamic model registration
+        self._deduplicate_view_registrations(plugin_configs, registry)
 
-    def _register_missing_plugin_models(self, plugin_list, app_registry, netbox_registry, model_register_function):
+        # Refresh form fields only if new models were registered
+        if models_registered:
+            self._refresh_form_field(CustomFieldForm, "custom_fields", ObjectType, ContentTypeMultipleChoiceField, _)
+            self._refresh_form_field(TagForm, "tags", ObjectType, ContentTypeMultipleChoiceField, _)
+
+    def _iter_plugin_configs(self, plugin_list, app_registry):
+        """
+        Yields (plugin_name, app_config, app_label) tuples for each plugin,
+        logging and skipping any that fail to resolve.
+        """
+        for plugin_name in plugin_list:
+            try:
+                app_config = app_registry.get_app_config(plugin_name)
+                yield plugin_name, app_config, app_config.label
+            except LookupError as e:
+                logger.error("Error resolving plugin %s: %s", plugin_name, e, exc_info=True)
+
+    def _register_missing_plugin_models(self, plugin_configs, netbox_registry, model_register_function):
         """
         Registers plugin models that were not registered during initial application startup.
 
-        Iterates through the provided list of plugin names, identifies models that are missing from the NetBox feature registry, and registers them using the supplied registration function. Prints errors encountered during processing and reports the number of models registered if any were missed.
+        Returns True if any models were registered, False otherwise.
         """
         unregistered_models = []
 
-        for plugin_name in plugin_list:
+        for plugin_name, app_config, app_label in plugin_configs:
             try:
-                plugin_app_config = app_registry.get_app_config(plugin_name)
-                app_label = plugin_app_config.label
-
-                for model_class in plugin_app_config.get_models():
+                for model_class in app_config.get_models():
                     model_name = model_class._meta.model_name
                     if not self._is_model_registered(app_label, model_name, netbox_registry):
                         unregistered_models.append(model_class)
-
-            except Exception as e:
-                print(f"Error processing plugin {plugin_name}: {e}")
+            except Exception:
+                logger.exception("Error processing models for plugin %s", plugin_name)
 
         if unregistered_models:
             model_register_function(*unregistered_models)
-            print(f"Plugin Reloader: Registered {len(unregistered_models)} previously missed models")
+            logger.info("Registered %d previously missed models", len(unregistered_models))
+            return True
+        return False
 
-    def _is_model_registered(self, app_label, model_name, registry):
+    def _deduplicate_view_registrations(self, plugin_configs, netbox_registry):
+        """
+        Removes duplicate view registrations for plugin models from the NetBox registry.
+
+        When dynamic models are registered, register_model_view may be called multiple
+        times for the same model/view combination, resulting in duplicate tabs (e.g.
+        Journal, Changelog appearing more than once). This method deduplicates entries
+        in registry['views'] for all plugin app labels, keeping only the last occurrence
+        of each view name per model (last wins ensures the most recent registration is kept).
+        """
+        views_registry = netbox_registry.get("views", {})
+
+        for plugin_name, app_config, app_label in plugin_configs:
+            if app_label not in views_registry:
+                continue
+
+            for model_name, view_list in list(views_registry[app_label].items()):
+                seen = set()
+                reversed_deduped = []
+                for entry in reversed(view_list):
+                    key = entry.get("name")
+                    if key is None:
+                        reversed_deduped.append(entry)
+                        continue
+                    if key not in seen:
+                        seen.add(key)
+                        reversed_deduped.append(entry)
+                deduped = list(reversed(reversed_deduped))
+                removed = len(view_list) - len(deduped)
+                if removed:
+                    logger.debug("Removed %d duplicate view entries for %s.%s", removed, app_label, model_name)
+                views_registry[app_label][model_name] = deduped
+
+    def _is_model_registered(self, app_label, model_name, netbox_registry):
         """
         Determines whether a model is registered in the NetBox registry.
 
         In NetBox 4.4+, we check if the model is in the registry['models'] structure.
-
-        Returns:
-            True if the specified model is present in the registry; otherwise, False.
         """
-        return app_label in registry["models"] and model_name in registry["models"][app_label]
+        models = netbox_registry["models"].get(app_label, {})
+        return model_name in models
 
     def _refresh_form_field(self, form_class, feature_name, object_type_class, field_class, translation_function):
         """
         Updates a form class's object_types field to reflect models supporting a specific NetBox feature.
-
-        Args:
-            form_class: The form class to update.
-            feature_name: The NetBox feature name (e.g., "custom_fields", "tags").
-            object_type_class: The ContentType-like class used to query object types.
-            field_class: The form field class to instantiate.
-            translation_function: Function used to translate field labels and help texts.
         """
         field_labels = {
             "custom_fields": ("Object types", "The type(s) of object that have this custom field"),
