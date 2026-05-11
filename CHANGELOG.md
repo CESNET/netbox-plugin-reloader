@@ -1,5 +1,11 @@
 # Changelog
 
+## [4.6.0.1] - 2026-05-11
+
+### Changed
+- Updated NetBox version pins to `4.6.0`–`4.6.99` and Django classifier to `6.0` for NetBox 4.6.x compatibility.
+- No code logic changes: all referenced NetBox APIs (`registry['models']`, `register_models`, `CustomFieldForm`/`TagForm`, `ObjectType.objects.with_feature`) are unchanged in 4.6.
+
 ## [4.5.4.1] - 2026-03-17
 
 ### Fixed

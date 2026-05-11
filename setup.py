@@ -35,7 +35,7 @@ setup(
     classifiers=[
         'Intended Audience :: Developers',
         'Framework :: Django',
-        'Framework :: Django :: 5.1',
+        'Framework :: Django :: 6.0',
         'License :: OSI Approved :: Apache Software License',
         'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3.12',
