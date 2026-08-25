@@ -6,14 +6,13 @@ The methods under test accept their dependencies as parameters, making them
 testable in isolation.
 """
 
-import unittest
-from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
-
 # We can't import the real class (requires Django), so we test methods directly
 # by constructing a minimal instance that bypasses Django's AppConfig machinery.
 import importlib
 import sys
+import unittest
+from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
 
 
 def _make_instance():
@@ -76,7 +75,7 @@ class TestDeduplicateViewRegistrations(unittest.TestCase):
         names = [e["name"] for e in result]
         self.assertEqual(names, ["changelog", "journal"])
         # The kept "journal" should be the LAST one (path="new")
-        journal_entry = [e for e in result if e["name"] == "journal"][0]
+        journal_entry = next(e for e in result if e["name"] == "journal")
         self.assertEqual(journal_entry["path"], "new")
 
     def test_nameless_views_always_preserved(self):

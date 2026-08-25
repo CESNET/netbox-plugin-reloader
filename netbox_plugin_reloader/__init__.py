@@ -68,7 +68,7 @@ class NetboxPluginReloaderConfig(PluginConfig):
                 app_config = app_registry.get_app_config(plugin_name)
                 yield plugin_name, app_config, app_config.label
             except LookupError as e:
-                logger.error("Error resolving plugin %s: %s", plugin_name, e, exc_info=True)
+                logger.exception("Error resolving plugin %s: %s", plugin_name, e)
 
     def _register_missing_plugin_models(self, plugin_configs, netbox_registry, model_register_function):
         """
