@@ -131,8 +131,10 @@ class NetboxPluginReloaderConfig(PluginConfig):
         Determines whether a model is registered in the NetBox registry.
 
         In NetBox 4.4+, we check if the model is in the registry['models'] structure.
+        The underlying dict is accessed directly (as NetBox core does) to avoid the
+        NetBox 4.6 FutureWarning on the deprecated 'models' registry key.
         """
-        models = netbox_registry["models"].get(app_label, {})
+        models = dict.__getitem__(netbox_registry, "models").get(app_label, {})
         return model_name in models
 
     def _refresh_form_field(self, form_class, feature_name, object_type_class, field_class, translation_function):
