@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.6.0.2] - 2026-08-25
+
+### Fixed
+- Avoid NetBox 4.6 FutureWarning on the deprecated `models` registry key by
+  accessing the underlying dict directly (same pattern NetBox core uses
+  internally). The 4.7 removal of the key is out of scope; version pins
+  already exclude 4.7.
+
 ## [4.6.0.1] - 2026-05-11
 
 ### Changed
