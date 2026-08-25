@@ -16,6 +16,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - run: pip install ruff pytest
+      # ruff pinned so CI matches local runs; bump deliberately
+      - run: pip install ruff==0.14.4 pytest
       - run: ruff check .
       - run: pytest tests/ -q
