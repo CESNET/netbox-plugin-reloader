@@ -4,5 +4,5 @@ __pycache__
 *.pyc
 .vscode
 dist
-ruff.toml
+build/
 .claude
