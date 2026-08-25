@@ -1,5 +1,6 @@
 import codecs
 import os.path
+
 from setuptools import find_packages, setup
 
 with open("README.md", "r") as fh:
@@ -15,8 +16,7 @@ def get_version(rel_path):
         if line.startswith('__version__'):
             delim = '"' if '"' in line else "'"
             return line.split(delim)[1]
-    else:
-        raise RuntimeError("Unable to find version string.")
+    raise RuntimeError("Unable to find version string.")
 
 setup(
     name='netbox-plugin-reloader',
@@ -24,7 +24,7 @@ setup(
     description='Dynamically reload NetBox plugins without server restart',
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url='https://github.com/Kani999/netbox-plugin-reloader',
+    url='https://github.com/CESNET/netbox-plugin-reloader',
     author="Jan Krupa",
     license='Apache 2',
     install_requires=[],
@@ -40,6 +40,7 @@ setup(
         'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3.12',
         'Programming Language :: Python :: 3.13',
+        'Programming Language :: Python :: 3.14',
         'Operating System :: OS Independent',
     ],
     keywords=['netbox', 'netbox-plugin'],
