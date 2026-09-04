@@ -24,8 +24,8 @@ class NetboxPluginReloaderConfig(PluginConfig):
     description = "Dynamically reload NetBox plugins without server restart"
     version = __version__
     base_url = "netbox-plugin-reloader"
-    min_version = "4.6.0"
-    max_version = "4.6.99"
+    min_version = "4.7.0"
+    max_version = "4.7.99"
 
     def ready(self):
         """
@@ -37,18 +37,38 @@ class NetboxPluginReloaderConfig(PluginConfig):
 
         from core.models.object_types import ObjectType
         from django.apps.registry import apps
-        from django.conf import settings
         from django.utils.translation import gettext_lazy as _
         from extras.forms.model_forms import CustomFieldForm, TagForm
-        from netbox.models.features import register_models
+        from netbox.models.features import (
+            ChangeLoggingMixin,
+            ContactsMixin,
+            ImageAttachmentsMixin,
+            JobsMixin,
+            JournalingMixin,
+            SyncedDataMixin,
+            register_models,
+        )
         from netbox.registry import registry
         from utilities.forms.fields import ContentTypeMultipleChoiceField
 
+        # Only plugins NetBox actually loaded (those failing min/max_version are skipped by NetBox 4.7).
         # Materialized because plugin_configs is iterated by both registration and deduplication
-        plugin_configs = list(self._iter_plugin_configs(settings.PLUGINS, apps))
+        plugin_configs = list(self._iter_plugin_configs(registry["plugins"]["installed"], apps))
+
+        # Mirrors the feature views register_models() adds (netbox/models/features.py)
+        feature_views = (
+            (ContactsMixin, "contacts"),
+            (JournalingMixin, "journal"),
+            (ChangeLoggingMixin, "changelog"),
+            (JobsMixin, "jobs"),
+            (ImageAttachmentsMixin, "image-attachments"),
+            (SyncedDataMixin, "sync"),
+        )
 
         # Register missing plugin models
-        models_registered = self._register_missing_plugin_models(plugin_configs, registry, register_models)
+        models_registered = self._register_missing_plugin_models(
+            plugin_configs, registry, register_models, feature_views
+        )
 
         # Deduplicate view registrations that may have accumulated during dynamic model registration
         self._deduplicate_view_registrations(plugin_configs, registry)
@@ -70,7 +90,7 @@ class NetboxPluginReloaderConfig(PluginConfig):
             except LookupError:
                 logger.exception("Error resolving plugin %s", plugin_name)
 
-    def _register_missing_plugin_models(self, plugin_configs, netbox_registry, model_register_function):
+    def _register_missing_plugin_models(self, plugin_configs, netbox_registry, model_register_function, feature_views):
         """
         Registers plugin models that were not registered during initial application startup.
 
@@ -82,7 +102,7 @@ class NetboxPluginReloaderConfig(PluginConfig):
             try:
                 for model_class in app_config.get_models():
                     model_name = model_class._meta.model_name
-                    if not self._is_model_registered(app_label, model_name, netbox_registry):
+                    if not self._is_model_registered(model_class, app_label, model_name, netbox_registry, feature_views):
                         unregistered_models.append(model_class)
             except Exception:
                 logger.exception("Error processing models for plugin %s", plugin_name)
@@ -126,16 +146,18 @@ class NetboxPluginReloaderConfig(PluginConfig):
                     logger.debug("Removed %d duplicate view entries for %s.%s", removed, app_label, model_name)
                 views_registry[app_label][model_name] = deduped
 
-    def _is_model_registered(self, app_label, model_name, netbox_registry):
+    def _is_model_registered(self, model_class, app_label, model_name, netbox_registry, feature_views):
         """
-        Determines whether a model is registered in the NetBox registry.
+        Determines whether register_models() has already run for a model.
 
-        In NetBox 4.4+, we check if the model is in the registry['models'] structure.
-        The underlying dict is accessed directly (as NetBox core does) to avoid the
-        NetBox 4.6 FutureWarning on the deprecated 'models' registry key.
+        NetBox 4.7 removed registry['models'], so registration is inferred from registry['views']:
+        a model is registered if every feature view register_models() would add for it (based on
+        the feature mixins it subclasses) is already present by name. Models with no applicable
+        feature mixin have nothing to register and count as registered.
         """
-        models = dict.__getitem__(netbox_registry, "models").get(app_label, {})
-        return model_name in models
+        views = netbox_registry.get("views", {}).get(app_label, {}).get(model_name, [])
+        present = {view.get("name") for view in views}
+        return all(name in present for mixin, name in feature_views if issubclass(model_class, mixin))
 
     def _refresh_form_field(self, form_class, feature_name, object_type_class, field_class, translation_function):
         """

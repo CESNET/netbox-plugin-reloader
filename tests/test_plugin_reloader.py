@@ -47,6 +47,22 @@ def _make_instance():
 INSTANCE = _make_instance()
 
 
+class FakeJournalingMixin:
+    pass
+
+
+class FakeChangeLoggingMixin:
+    pass
+
+
+FEATURE_VIEWS = ((FakeJournalingMixin, "journal"), (FakeChangeLoggingMixin, "changelog"))
+
+
+def _make_model(app_label, model_name, *bases):
+    """Build a real class (issubclass needs one) standing in for a Django model."""
+    return type(model_name, bases, {"_meta": SimpleNamespace(model_name=model_name), "_app_label": app_label})
+
+
 # ---------------------------------------------------------------------------
 # _deduplicate_view_registrations
 # ---------------------------------------------------------------------------
@@ -157,10 +173,6 @@ class TestDeduplicateViewRegistrations(unittest.TestCase):
 # _register_missing_plugin_models
 # ---------------------------------------------------------------------------
 class TestRegisterMissingPluginModels(unittest.TestCase):
-    def _make_model(self, app_label, model_name):
-        meta = SimpleNamespace(model_name=model_name)
-        return SimpleNamespace(_meta=meta, _app_label=app_label)
-
     def _make_app_config(self, models):
         config = MagicMock()
         config.get_models.return_value = models
@@ -168,31 +180,31 @@ class TestRegisterMissingPluginModels(unittest.TestCase):
         return config
 
     def test_registers_unregistered_models(self):
-        model = self._make_model("test_app", "mymodel")
+        model = _make_model("test_app", "mymodel", FakeJournalingMixin)
         config = self._make_app_config([model])
         plugin_configs = [("test_plugin", config, "test_app")]
-        registry = {"models": {}}
+        registry = {"views": {}}
         register_fn = MagicMock()
 
-        result = INSTANCE._register_missing_plugin_models(plugin_configs, registry, register_fn)
+        result = INSTANCE._register_missing_plugin_models(plugin_configs, registry, register_fn, FEATURE_VIEWS)
 
         self.assertTrue(result)
         register_fn.assert_called_once_with(model)
 
     def test_skips_registered_models(self):
-        model = self._make_model("test_app", "mymodel")
+        model = _make_model("test_app", "mymodel", FakeJournalingMixin)
         config = self._make_app_config([model])
         plugin_configs = [("test_plugin", config, "test_app")]
-        registry = {"models": {"test_app": {"mymodel": True}}}
+        registry = {"views": {"test_app": {"mymodel": [{"name": "journal"}]}}}
         register_fn = MagicMock()
 
-        result = INSTANCE._register_missing_plugin_models(plugin_configs, registry, register_fn)
+        result = INSTANCE._register_missing_plugin_models(plugin_configs, registry, register_fn, FEATURE_VIEWS)
 
         self.assertFalse(result)
         register_fn.assert_not_called()
 
     def test_broken_plugin_skipped_others_continue(self):
-        good_model = self._make_model("good_app", "goodmodel")
+        good_model = _make_model("good_app", "goodmodel", FakeJournalingMixin)
 
         broken_config = MagicMock()
         broken_config.get_models.side_effect = RuntimeError("broken")
@@ -205,10 +217,10 @@ class TestRegisterMissingPluginModels(unittest.TestCase):
             ("broken_plugin", broken_config, "broken_app"),
             ("good_plugin", good_config, "good_app"),
         ]
-        registry = {"models": {}}
+        registry = {"views": {}}
         register_fn = MagicMock()
 
-        result = INSTANCE._register_missing_plugin_models(plugin_configs, registry, register_fn)
+        result = INSTANCE._register_missing_plugin_models(plugin_configs, registry, register_fn, FEATURE_VIEWS)
 
         self.assertTrue(result)
         register_fn.assert_called_once_with(good_model)
@@ -216,10 +228,10 @@ class TestRegisterMissingPluginModels(unittest.TestCase):
     def test_returns_false_when_nothing_to_register(self):
         config = self._make_app_config([])
         plugin_configs = [("test_plugin", config, "test_app")]
-        registry = {"models": {}}
+        registry = {"views": {}}
         register_fn = MagicMock()
 
-        result = INSTANCE._register_missing_plugin_models(plugin_configs, registry, register_fn)
+        result = INSTANCE._register_missing_plugin_models(plugin_configs, registry, register_fn, FEATURE_VIEWS)
 
         self.assertFalse(result)
         register_fn.assert_not_called()
@@ -229,17 +241,28 @@ class TestRegisterMissingPluginModels(unittest.TestCase):
 # _is_model_registered
 # ---------------------------------------------------------------------------
 class TestIsModelRegistered(unittest.TestCase):
-    def test_model_present(self):
-        registry = {"models": {"myapp": {"mymodel": True}}}
-        self.assertTrue(INSTANCE._is_model_registered("myapp", "mymodel", registry))
+    def _call(self, model, registry):
+        return INSTANCE._is_model_registered(model, "myapp", "mymodel", registry, FEATURE_VIEWS)
 
-    def test_model_absent(self):
-        registry = {"models": {"myapp": {"othermodel": True}}}
-        self.assertFalse(INSTANCE._is_model_registered("myapp", "mymodel", registry))
+    def test_all_feature_views_present(self):
+        model = _make_model("myapp", "mymodel", FakeJournalingMixin, FakeChangeLoggingMixin)
+        registry = {"views": {"myapp": {"mymodel": [{"name": "journal"}, {"name": "changelog"}, {"name": "edit"}]}}}
+        self.assertTrue(self._call(model, registry))
+
+    def test_one_feature_view_missing(self):
+        model = _make_model("myapp", "mymodel", FakeJournalingMixin, FakeChangeLoggingMixin)
+        registry = {"views": {"myapp": {"mymodel": [{"name": "journal"}]}}}
+        self.assertFalse(self._call(model, registry))
 
     def test_app_label_absent(self):
-        registry = {"models": {}}
-        self.assertFalse(INSTANCE._is_model_registered("myapp", "mymodel", registry))
+        model = _make_model("myapp", "mymodel", FakeJournalingMixin)
+        registry = {"views": {}}
+        self.assertFalse(self._call(model, registry))
+
+    def test_no_applicable_mixin_counts_as_registered(self):
+        model = _make_model("myapp", "mymodel")
+        registry = {"views": {}}
+        self.assertTrue(self._call(model, registry))
 
 
 # ---------------------------------------------------------------------------
