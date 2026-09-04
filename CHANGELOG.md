@@ -1,5 +1,17 @@
 # Changelog
 
+## [4.7.0.1] - 2026-09-04
+
+### Changed
+- NetBox 4.7 compatibility: `registry['models']` was removed in 4.7, so model
+  registration is now detected via `registry['views']` (a model is considered
+  registered when all feature views `register_models()` would add for it are
+  present).
+- Iterate `registry['plugins']['installed']` instead of `settings.PLUGINS`, so plugins that
+  NetBox 4.7 skipped for an incompatible `min_version`/`max_version` no longer produce
+  "Error resolving plugin" tracebacks at startup.
+- Version pins updated to `4.7.0`–`4.7.99`; Django classifier bumped to `6.1`.
+
 ## [4.6.0.2] - 2026-08-25
 
 ### Fixed
